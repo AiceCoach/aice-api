@@ -1,0 +1,23 @@
+# OS / editor
+.DS_Store
+.vscode/
+
+# Dependencies / builds
+node_modules/
+.next/
+dist/
+out/
+coverage/
+
+# Hosting
+.vercel/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Env & secrets
+.env
+.env.*
+.env.local
