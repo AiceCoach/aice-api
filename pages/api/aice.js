@@ -8,9 +8,13 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  // Simple health check
+  // ✅ Simple health check with version tag
   if (req.method === "GET") {
-    return res.status(200).json({ ok: true, route: "/api/aice" });
+    return res.status(200).json({
+      ok: true,
+      route: "/api/aice",
+      version: "brain v3" // 👈 makes it obvious which brain is live
+    });
   }
 
   if (req.method !== "POST") {
@@ -25,15 +29,10 @@ export default async function handler(req, res) {
     }
 
     const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-      // project: process.env.OPENAI_PROJECT_ID, // optional
+      apiKey: process.env.OPENAI_API_KEY
     });
 
-    // --- FIX 1: Strong, explicit system prompt (no topic drift, no language flip) ---
-    // - Default language EN unless user explicitly writes Danish (or asks for Danish).
-    // - Stay on requested subject; do not introduce hobbies/feelings unless user asks.
-    // - Math: enforce Methods Bank (equal groups → chunking → long division).
-    // - Guide, never give; use 4 Gears.
+    // ✅ Strong system prompt with ruleset
     const SYSTEM = `
 You are Aice, the positiveSOUL School AI coach.
 
@@ -57,7 +56,7 @@ TEACHING PROTOCOL (4 GEARS)
 4) Reflection on method/next step
 Protocol rhythm: Ask → Wait → Encourage → Hint → Ask again.
 
-MATH METHODS BANK (use when relevant)
+MATH METHODS BANK
 - Addition: number line, friendly numbers, column.
 - Subtraction: counting back, number line, decomposition/borrowing.
 - Multiplication: arrays, repeated addition, distributive property.
@@ -73,7 +72,7 @@ BEHAVIORAL RULES
 - Never ask abstract emotion questions about numbers unless the student invites it.
 `;
 
-    // --- FIX 2: Tiny few-shot to anchor correct division behavior ---
+    // ✅ Few-shot anchors for correct division behavior
     const FEWSHOT = [
       {
         role: "user",
@@ -95,23 +94,17 @@ BEHAVIORAL RULES
       }
     ];
 
-    // --- FIX 3: Lower temperature for tighter adherence; keep model stable ---
+    // ✅ Completion call
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.4, // was 0.6; lower to reduce drifting and language flips
+      temperature: 0.4,
       messages: [
         { role: "system", content: SYSTEM },
-
-        // Optional role hint to keep context aligned with school roles
         {
           role: "system",
           content: `Role context: The current user is acting as "${role}". Align with school-safe guidance and Fælles Mål.`
         },
-
-        // Few-shot anchors for division behavior
         ...FEWSHOT,
-
-        // The user's live message
         { role: "user", content: message }
       ]
     });
@@ -126,7 +119,7 @@ BEHAVIORAL RULES
       name: err?.name,
       status: err?.status || err?.statusCode,
       message: err?.message,
-      error: err?.error || err?.response?.data || undefined,
+      error: err?.error || err?.response?.data || undefined
     };
     console.error("Aice API error:", info);
     return res.status(code).json({ error: "Upstream error", detail: info });
