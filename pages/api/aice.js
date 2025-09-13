@@ -2,18 +2,18 @@
 import OpenAI from "openai";
 
 export default async function handler(req, res) {
-  // CORS so WordPress can call it
+  // --- CORS ---
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS, GET");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  // Health check with version tag
+  // --- Health check ---
   if (req.method === "GET") {
     return res.status(200).json({
       ok: true,
       route: "/api/aice",
-    version: "brain v3 + emoji+ no-final-answer"
+      version: "brain v3 + emoji+ no-final-answer"
     });
   }
 
@@ -22,58 +22,54 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { message = "", role = "student", language } = req.body || {};
-
     if (!process.env.OPENAI_API_KEY) {
       return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
     }
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const { message = "", role = "student", language } = req.body || {};
+    if (!message.trim()) {
+      return res.status(400).json({ error: "Missing 'message' in body" });
+    }
 
-    // ——— SYSTEM: subject-neutral, supports Musik explicitly ———
+    const MODEL = process.env.MODEL || "gpt-4o-mini";
+    const TEMP = Number(process.env.TEMP ?? 0.3);
+
+    // --- SYSTEM PROMPT (includes NO-FINAL-ANSWER guardrail) ---
     const SYSTEM = `
 You are Aice, the positiveSOUL School AI coach.
 
 IDENTITY & TONE
-- Soulful, smooth, encouraging. Celebrate effort. Guide, never give final products.
-- Refuse finished assignments/essays; offer scaffolds, outlines, prompts, or steps instead.
+- Soulful, smooth, encouraging. Guide, never give final products.
+- Celebrate effort. Be kind and confident.
 
-LANGUAGE
-- Default to English unless the user's latest message is clearly Danish OR they ask for Danish; then reply in Danish.
-- Do not switch languages mid-thread unless the user asks to switch.
-
-SCOPE
-- Support all subjects (e.g., Musik, Engelsk, Matematik, Historie, Kristendomskundskab).
-- Stay on the user’s topic; do not introduce unrelated themes.
+GUARDRAILS
+- Never give finished essays or homework.
+- For math, NEVER reveal the final numeric result. Always stop one step before and ask the student to finish.
+- If asked for full work, refuse and offer outline, steps, checkpoints, rubric, or a tiny model.
 
 TEACHING PROTOCOL (4 GEARS)
-1) Emojis/keywords to lower the barrier
-2) Sentence starters
-3) Guiding questions with concrete steps/examples
-4) Reflection on method/next step
+1) Emojis / visuals 🍎🟦😊 to lower the barrier.
+2) Sentence starters.
+3) Guiding questions with concrete steps/examples.
+4) Reflection (“How do you know?” / “Check another way.”)
 Rhythm: Ask → Wait → Encourage → Hint → Ask again.
 
-INTEGRITY
-- If asked for finished work, refuse and offer: outline, steps, checkpoints, rubric, short example (not full work).
+METHODS BANK
+- Math: equal groups, arrays, number line, chunking, distributive (20+3)×c.
+- Language: vocab banks, sentence starters, mini-model + student try.
+- Musik: body percussion, ostinato, call–response; connect to competencies.
 
-METHODS BANK (examples)
-- Math: equal groups → chunking → long division; arrays; number lines.
-- Language: sentence starters; vocabulary banks; short-model + student try.
-- Musik: short activities with call-and-response, body percussion, ostinato; connect to competencies.
-
-FÆLLES MÅL ANCHOR (name briefly when helpful)
+FÆLLES MÅL (brief anchor when helpful)
 - Musik: musikudøvelse, musikalsk skaben, musikforståelse.
 - Matematik: problembehandling, repræsentation, modellering, kommunikation.
-- Keep it practical—1 short line.
 
 STYLE
-- Be concise, stepwise, and concrete.
-- Offer 2–3 choices, then ask a question to proceed.
-`;
+- Concise, concrete, 2–3 choices, then a question.
+- With younger students, keep sentences short (≤12 words) and emoji-friendly.
+`.trim();
 
-    // ——— Few-shots: include a MUSIK example so Aice embraces music ———
+    // --- FEW-SHOTS (music + integrity + math without final number) ---
     const FEWSHOT = [
-      // MUSIC scenario
       {
         role: "user",
         content: "Hej Aice, giv mig idéer til rytme-aktiviteter i musikundervisning."
@@ -82,14 +78,11 @@ STYLE
         role: "assistant",
         content:
 `Lad os vælge mellem tre hurtige rytme-aktiviteter (4.–6. kl.):
-1) 👐 Body percussion call-and-response (8-tals mønstre).
+1) 👐 Body percussion call-and-response.
 2) 🥁 Ostinato-lag: klap en basispuls, læg et simpelt rytmemønster ovenpå.
-3) 🎵 Rytmekort: træk 2–3 kort (ta, ti-ti, pause) og sig/klap dem i kanon.
-
+3) 🎵 Rytmekort: træk 2–3 kort og klap/syng dem i kanon.
 Hvilken vil du prøve først? (Fælles Mål – Musik: musikudøvelse, musikalsk skaben).`
       },
-
-      // A short integrity example (outline vs finished work)
       {
         role: "user",
         content: "Skriv en færdig opgave for mig."
@@ -97,42 +90,92 @@ Hvilken vil du prøve først? (Fælles Mål – Musik: musikudøvelse, musikalsk
       {
         role: "assistant",
         content:
-`Jeg kan ikke levere en færdig opgave, men jeg kan give dig en skitse:
+`Jeg kan ikke skrive hele opgaven 🚫, men jeg kan lave en skitse:
 • Emneidéer (3 valg)
 • Disposition i 5 trin
-• Sætningstartere til hvert afsnit
-• Tjekliste til gennemlæsning
-Vil du have skitsen eller tjeklisten først?`
+• Sætningstartere
+• Tjekliste ✅
+Vil du starte med skitse eller tjekliste?`
+      },
+      {
+        role: "user",
+        content: "Can you solve 12 ÷ 3?"
+      },
+      {
+        role: "assistant",
+        content:
+`Imagine 12 apples 🍎 and 3 friends 🤝. Share equally.
+Give one apple to each friend, then another, until none are left.
+👉 How many apples does each friend get? Tell me. 😊`
       }
     ];
 
-    // Tiny role hint + language nudge (non-invasive)
-    const ROLE_HINT = {
-      student: "You are helping a Danish folkeskole student. Keep outputs short and step-by-step.",
-      teacher: "You are supporting a Danish teacher. Map suggestions to Fælles Mål and classroom routines.",
-      leadership: "You are advising school leadership. Think policies, guardrails, and safe implementation.",
-      parent: "You are guiding a parent with supportive, simple steps at home."
-    }[role] || "You are helping a Danish student.";
+    // --- ROLE & LANGUAGE HINTS ---
+    const ROLE_HINT =
+      role === "teacher"
+        ? "You are supporting a Danish teacher. Map to Fælles Mål and classroom routines."
+        : role === "leadership"
+        ? "You are advising school leadership. Focus on policies and safe implementation."
+        : role === "parent"
+        ? "You are guiding a parent with supportive, simple steps at home."
+        : "You are helping a Danish folkeskole student with short, stepwise answers.";
 
     const LANG_HINT =
-      language === "da" ? "Reply in Danish." :
-      /[ÆØÅæøå]|( og | ikke | jeg | du )/.test(message) ? "Reply in Danish." :
-      "Reply in English unless the user clearly writes Danish.";
+      language === "da"
+        ? "Reply in Danish."
+        : (/[ÆØÅæøå]|( og | ikke | jeg | du )/.test(message)
+          ? "Reply in Danish."
+          : "Reply in English unless the user clearly writes Danish.");
 
+    const messages = [
+      { role: "system", content: SYSTEM },
+      { role: "system", content: `Context: ${ROLE_HINT} ${LANG_HINT}` },
+      ...FEWSHOT,
+      { role: "user", content: message }
+    ];
+
+    // --- OpenAI call ---
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.3,
+      model: MODEL,
+      temperature: TEMP,
       max_tokens: 650,
-      messages: [
-        { role: "system", content: SYSTEM },
-        { role: "system", content: `Role context: ${ROLE_HINT} ${LANG_HINT}` },
-        ...FEWSHOT,
-        { role: "user", content: message }
-      ]
+      messages
     });
 
-    const reply = completion.choices?.[0]?.message?.content
-      ?? "Jeg er her. Prøv igen? / I’m here—try again?";
+    let reply =
+      completion?.choices?.[0]?.message?.content ??
+      "Jeg er her. Prøv igen? / I’m here—try again?";
+
+    // --- SANITIZER: strip accidental final math answers ---
+    try {
+      const userAskedMath =
+        /(\d+\s*[\+\-x×*\/÷]\s*\d+)/i.test(message) ||
+        /\b(add|plus|minus|subtract|times|multiply|divide|divided by)\b/i.test(message);
+
+      if (userAskedMath) {
+        // remove any line that states “= 4” or “equals 13”, etc.
+        reply = reply.replace(
+          /(^|\n).*?\d+\s*([+x×\-÷\/*])\s*\d+\s*(=|equals?)\s*-?\d+(\.\d+)?[^\n]*\n?/gi,
+          ""
+        );
+        reply = reply.replace(
+          /(^|\n).*?\b(equals?|=)\s*-?\d+(\.\d+)?[^\n]*\n?/gi,
+          ""
+        );
+
+        if (!reply.trim()) {
+          reply =
+            "Let’s share apples 🍎. You have 12 apples and 3 friends. 👉 How many does each friend get?";
+        }
+        if (!/[?？！]$/.test(reply.trim())) {
+          reply = reply.trim().replace(/[.!]+$/, "") + " What do you think? 😊";
+        }
+      }
+    } catch (e) {
+      console.error("Sanitizer failed", e);
+    }
+
     return res.status(200).json({ reply });
   } catch (err) {
     const code = err?.status || err?.statusCode || 500;
