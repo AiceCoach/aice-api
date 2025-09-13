@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       route: "/api/aice",
-      version: "brain v3"
+        version: "brain v3 + emoji+"
     });
   }
 
