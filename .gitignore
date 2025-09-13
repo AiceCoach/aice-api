@@ -21,3 +21,6 @@ yarn-error.log*
 .env
 .env.*
 .env.local
+pages/api/aice.backup.js
+pages/api/aice.backup.js
+pages/api/aice.backup.js
