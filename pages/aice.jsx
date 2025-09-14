@@ -1,7 +1,7 @@
 // pages/aice.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-// Use HTTPS so it loads on an HTTPS page
+// Use HTTPS so the image loads on an HTTPS page
 const AICE_AVATAR = "https://positivesoul.ai/wp-content/uploads/2025/08/aice_contact.jpg";
 
 // Typical Folkeskole ranges (can vary locally)
@@ -50,9 +50,7 @@ export default function AicePage() {
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   const subjectOptions = useMemo(() => subjectsForGrade(grade), [grade]);
-  useEffect(() => {
-    if (subject && !subjectOptions.some(s => s.key === subject)) setSubject("");
-  }, [subjectOptions, subject]);
+  useEffect(() => { if (subject && !subjectOptions.some(s => s.key === subject)) setSubject(""); }, [subjectOptions, subject]);
 
   async function onSend(e) {
     e?.preventDefault();
@@ -99,7 +97,17 @@ export default function AicePage() {
 
   return (
     <div style={{maxWidth:860,margin:"0 auto",font:"16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial"}}>
-      <h1 style={{margin:"16px 0 8px"}}>Aice Coach (test)</h1>
+      {/* Header with avatar (easy to see it updated) */}
+      <div style={{display:"flex",alignItems:"center",gap:12,margin:"16px 0 8px"}}>
+        <img
+          src={AICE_AVATAR}
+          alt="Aice"
+          width={40}
+          height={40}
+          style={{borderRadius:"50%", border:"1px solid #e5e7eb"}}
+        />
+        <h1 style={{margin:0}}>Aice Coach (test)</h1>
+      </div>
       <p style={{marginTop:0,color:"#666"}}>Guide, not give • newest-on-top • input auto-clears</p>
 
       {/* Controls */}
