@@ -5,6 +5,14 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 const AICE_AVATAR = "https://positivesoul.ai/wp-content/uploads/2025/08/aice_contact.jpg";
 const AICE_HERO   = "https://positivesoul.ai/wp-content/uploads/2025/09/aice-standing.png";
 
+// Brand-safe text colors (no #666)
+const TEXT_DIM  = "#475569"; // labels, small text
+const TEXT_NOTE = "#64748b"; // footnotes / helper text
+
+// Taglines
+const TAGLINE_EN = "Guides, not gives.";
+const TAGLINE_DA = "Tænk selv – med støtte.";
+
 // Typical Folkeskole ranges (can vary locally)
 const SUBJECTS = [
   { key:"dansk", label:"Dansk", from:0, to:9 },
@@ -120,9 +128,9 @@ export default function AicePage() {
           }}
         />
         <div>
-          <h1 style={{ margin: "8px 0" }}>Aice Coach (test)</h1>
-          <p style={{ margin: 0, color: "#666" }}>
-            Guide, not give • newest-on-top • input auto-clears
+          <h1 style={{ margin: "8px 0" }}>Aice AI Coach</h1>
+          <p style={{ margin: 0, color: TEXT_DIM }}>
+            {replyInDanish ? "Tænk selv – med støtte." : "Guides, not gives."}
           </p>
         </div>
       </div>
@@ -130,7 +138,7 @@ export default function AicePage() {
       {/* Controls */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,alignItems:"center",margin:"12px 0"}}>
         <label style={{display:"grid",gap:6}}>
-          <span style={{fontSize:12,color:"#666"}}>Role</span>
+          <span style={{fontSize:12,color:TEXT_DIM}}>Role</span>
           <select value={role} onChange={e=>setRole(e.target.value)}>
             <option value="student">student</option>
             <option value="teacher">teacher</option>
@@ -140,7 +148,7 @@ export default function AicePage() {
         </label>
 
         <label style={{display:"grid",gap:6}}>
-          <span style={{fontSize:12,color:"#666"}}>Grade (0–10)</span>
+          <span style={{fontSize:12,color:TEXT_DIM}}>Grade (0–10)</span>
           <select value={grade} onChange={e=>setGrade(e.target.value === "auto" ? "auto" : Number(e.target.value))}>
             <option value="auto">(auto)</option>
             {Array.from({length:11}).map((_,i)=><option key={i} value={i}>{i}</option>)}
@@ -148,14 +156,14 @@ export default function AicePage() {
         </label>
 
         <label style={{display:"grid",gap:6}}>
-          <span style={{fontSize:12,color:"#666"}}>Subject</span>
+          <span style={{fontSize:12,color:TEXT_DIM}}>Subject</span>
           <select value={subject} onChange={e=>setSubject(e.target.value)}>
             <option value="">(choose)</option>
             {subjectOptions.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
         </label>
 
-        <label style={{display:"flex",gap:8,alignItems:"center",marginTop:20}}>
+        <label style={{display:"flex",gap:8,alignItems:"center",marginTop:20,color:TEXT_DIM}}>
           <input type="checkbox" checked={replyInDanish} onChange={e=>setReplyInDanish(e.target.checked)} />
           <span>Reply in Danish</span>
         </label>
@@ -185,7 +193,7 @@ export default function AicePage() {
             <div style={{
               width:120, flex:"0 0 120px",
               display:"flex", alignItems:"center", gap:8,
-              fontSize:12, color:"#666"
+              fontSize:12, color:TEXT_DIM
             }}>
               {m.role === "assistant" ? (
                 <>
@@ -221,7 +229,7 @@ export default function AicePage() {
         ))}
       </div>
 
-      <p style={{fontSize:12,color:"#888",marginTop:16}}>
+      <p style={{fontSize:12,color:TEXT_NOTE,marginTop:16}}>
         Note: Ranges reflect typical Danish Fælles Mål patterns (e.g., Musik 1–6; valgfag 7–9; Natur/teknologi 1–6;
         Biologi/Geografi/Fysik-kemi 7–9). Local schedules can vary.
       </p>
