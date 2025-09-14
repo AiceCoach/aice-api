@@ -72,15 +72,18 @@ export default function AicePage() {
     inputRef.current?.focus();
 
     try {
+      // 👇 enforce Danish at the message level when the checkbox is checked
+      const messageForApi = replyInDanish ? `Svar på dansk.\n\n${text}` : text;
+
       const res = await fetch("/api/aice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: text,
+          message: messageForApi,           // 👈 use the language-hinted message
           role,
           grade,
           subject,
-          lang: replyInDanish ? "da" : "en"
+          lang: replyInDanish ? "da" : "en" // still send the lang flag
         })
       });
       const data = await res.json().catch(() => ({}));
