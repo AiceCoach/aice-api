@@ -1,8 +1,9 @@
 // pages/aice.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-// Use HTTPS so the image loads on an HTTPS page
+// Images (HTTPS so they load on an HTTPS page)
 const AICE_AVATAR = "https://positivesoul.ai/wp-content/uploads/2025/08/aice_contact.jpg";
+const AICE_HERO   = "https://positivesoul.ai/wp-content/uploads/2025/09/aice-standing.png";
 
 // Typical Folkeskole ranges (can vary locally)
 const SUBJECTS = [
@@ -72,18 +73,18 @@ export default function AicePage() {
     inputRef.current?.focus();
 
     try {
-      // ✅ Enforce Danish from the client when checkbox is checked
+      // Enforce Danish from client when checkbox is checked
       const messageForApi = replyInDanish ? `Svar på dansk.\n\n${text}` : text;
 
       const res = await fetch("/api/aice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: messageForApi,             // send the language-hinted text
+          message: messageForApi,
           role,
           grade,
           subject,
-          lang: replyInDanish ? "da" : "en",  // also send a lang flag
+          lang: replyInDanish ? "da" : "en",
         })
       });
       const data = await res.json().catch(() => ({}));
@@ -100,18 +101,31 @@ export default function AicePage() {
 
   return (
     <div style={{maxWidth:860,margin:"0 auto",font:"16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial"}}>
-      {/* Header with avatar */}
-      <div style={{display:"flex",alignItems:"center",gap:12,margin:"16px 0 8px"}}>
+      {/* Hero: standing Aice presenting the chat */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "auto 1fr",
+        gap: 16,
+        alignItems: "center",
+        margin: "8px 0 12px"
+      }}>
         <img
-          src={AICE_AVATAR}
-          alt="Aice"
-          width={40}
-          height={40}
-          style={{borderRadius:"50%", border:"1px solid #e5e7eb"}}
+          src={AICE_HERO}
+          alt="Aice standing"
+          style={{
+            width: "min(180px, 28vw)",
+            height: "auto",
+            objectFit: "contain",
+            filter: "drop-shadow(0 8px 20px rgba(0,0,0,0.18))"
+          }}
         />
-        <h1 style={{margin:0}}>Aice Coach (test)</h1>
+        <div>
+          <h1 style={{ margin: "8px 0" }}>Aice Coach (test)</h1>
+          <p style={{ margin: 0, color: "#666" }}>
+            Guide, not give • newest-on-top • input auto-clears
+          </p>
+        </div>
       </div>
-      <p style={{marginTop:0,color:"#666"}}>Guide, not give • newest-on-top • input auto-clears</p>
 
       {/* Controls */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,alignItems:"center",margin:"12px 0"}}>
