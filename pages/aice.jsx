@@ -58,8 +58,17 @@ export default function AicePage() {
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
+  // --- NEW: remember last chosen subject; default to English to avoid math drift
+  useEffect(() => {
+    const saved = typeof window !== "undefined" && localStorage.getItem("aice_subject");
+    if (saved) setSubject(saved);
+    else setSubject("engelsk"); // default lane (API will canonicalize)
+  }, []);
+
   const subjectOptions = useMemo(() => subjectsForGrade(grade), [grade]);
-  useEffect(() => { if (subject && !subjectOptions.some(s => s.key === subject)) setSubject(""); }, [subjectOptions, subject]);
+  useEffect(() => {
+    if (subject && !subjectOptions.some(s => s.key === subject)) setSubject("");
+  }, [subjectOptions, subject]);
 
   async function onSend(e) {
     e?.preventDefault();
@@ -84,6 +93,15 @@ export default function AicePage() {
       // Enforce Danish from client when checkbox is checked
       const messageForApi = replyInDanish ? `Svar på dansk.\n\n${text}` : text;
 
+      // --- NEW: build short chronological history (oldest -> newest)
+      const history = [...msgs]
+        .slice(0, 8)         // last 8 turns are enough
+        .reverse()           // now oldest first
+        .map(m => ({
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: m.text
+        }));
+
       const res = await fetch("/api/aice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -91,10 +109,12 @@ export default function AicePage() {
           message: messageForApi,
           role,
           grade,
-          subject,
-          lang: replyInDanish ? "da" : "en",
+          subject: subject || "engelsk",            // --- NEW: always send subject
+          language: replyInDanish ? "da" : "en",    // --- NEW: API expects "language"
+          history
         })
       });
+
       const data = await res.json().catch(() => ({}));
       const reply = data.reply || data.message || data.output || "OK, but no reply field found.";
       setMsgs(prev => prev.map(m => m.id === pendingId ? { ...m, text: reply } : m));
@@ -130,7 +150,7 @@ export default function AicePage() {
         <div>
           <h1 style={{ margin: "8px 0" }}>Aice AI Coach</h1>
           <p style={{ margin: 0, color: TEXT_DIM }}>
-            {replyInDanish ? "Tænk selv – med støtte." : "Guides, not gives."}
+            {replyInDanish ? TAGLINE_DA : TAGLINE_EN}
           </p>
         </div>
       </div>
@@ -157,7 +177,14 @@ export default function AicePage() {
 
         <label style={{display:"grid",gap:6}}>
           <span style={{fontSize:12,color:TEXT_DIM}}>Subject</span>
-          <select value={subject} onChange={e=>setSubject(e.target.value)}>
+          <select
+            value={subject}
+            onChange={e=>{
+              const s = e.target.value;
+              setSubject(s);
+              try { localStorage.setItem("aice_subject", s); } catch {}
+            }}
+          >
             <option value="">(choose)</option>
             {subjectOptions.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
