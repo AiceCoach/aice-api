@@ -21,16 +21,57 @@ Guide, don’t give final products. Use Context Persistence: stay in the same su
   }
 }
 
-// ---------- CONTEXT PERSISTENCE (subject inference) ----------
+/* =========================================================
+   SUBJECT LOCKING & CONTEXT PERSISTENCE (UPDATED)
+   - Accepts explicit subject from UI (preferred)
+   - Better detection for MUSIC (notes/clefs/scales)
+   - Defaults to ENGLISH to avoid math-first drift
+========================================================= */
+
+// Canonicalize incoming subject strings
+function canonicalSubject(s) {
+  if (!s) return null;
+  const t = String(s).toLowerCase().trim();
+  if (/(^|[^a-z])(eng|english|engelsk)([^a-z]|$)/.test(t)) return "english";
+  if (/(^|[^a-z])(mat|math|matematik)([^a-z]|$)/.test(t)) return "math";
+  if (/(^|[^a-z])(musik|music)([^a-z]|$)/.test(t)) return "music";
+  if (/(^|[^a-z])(hist|history|historie)([^a-z]|$)/.test(t)) return "history";
+  return null;
+}
+
+// Ambiguity note: "notes" can mean study notes or music notes.
+// We bias to MUSIC if context mentions clef/scale/staff/beat/etc.
 const SUBJECT_KEYWORDS = {
-  english: ["english", "engelsk", "vocabulary", "grammar", "phrases", "dialogue", "sentence", "ordforråd"],
-  math: ["math", "matematik", "division", "multiplication", "algebra", "brøk", "procent", "plus", "minus"],
-  music: ["music", "musik", "rhythm", "beat", "sing", "songwriting", "instruments", "kord", "kor", "body percussion"],
-  history: ["history", "historie", "timeline", "period", "events", "kanon", "kilder", "kilde"],
+  english: [
+    "english","engelsk","vocabulary","grammar","phrases","dialogue","sentence","ordforråd",
+    "reading","speaking","listening","writing"
+  ],
+  math: [
+    "math","matematik","division","multiplication","algebra","fraction","fractions",
+    "brøk","procent","plus","minus","times","multiply","divide","÷","×","+","-","=",
+    "equation","long division"
+  ],
+  music: [
+    "music","musik","rhythm","beat","tempo","meter","measure","bar","time signature",
+    "note","notes","music note","reading music","read music","sheet music","staff","stave",
+    "clef","treble clef","bass clef","ledger line","scale","scales","major","minor",
+    "interval","melody","harmony","chord","ostinato","body percussion","sing","songwriting",
+    "instrument","guitar","piano","drums","kor","kord"
+  ],
+  history: [
+    "history","historie","timeline","period","events","kanon","kilder","kilde",
+    "source analysis","historical"
+  ],
 };
 
 function detectSubjectFromText(txt) {
   const t = (txt || "").toLowerCase();
+
+  // Special case: "notes" + any music anchor → music
+  if (/\bnotes?\b/.test(t) && /\b(clef|scale|staff|stave|beat|meter|measure|bar|treble|bass|sheet|read(ing)? music)\b/.test(t)) {
+    return "music";
+  }
+
   for (const [subject, words] of Object.entries(SUBJECT_KEYWORDS)) {
     if (words.some((w) => t.includes(w))) return subject;
   }
@@ -40,53 +81,72 @@ function detectSubjectFromText(txt) {
 function inferSubject({ message, history = [] }) {
   // scan recent history last→first
   for (let i = history.length - 1; i >= 0; i--) {
-    const subj = detectSubjectFromText(history[i]?.content || "");
-    if (subj) return subj;
+    const s = detectSubjectFromText(history[i]?.content || "");
+    if (s) return s;
   }
   // otherwise, try the current message
   return detectSubjectFromText(message);
 }
 
-// ---------- FEW-SHOTS ----------
+/* =========================================================
+   FEW-SHOTS (REORDERED)
+   Put an English example FIRST to avoid cold-start math bias.
+========================================================= */
 const FEWSHOT = [
+  // English first to bias cold start away from math
   {
     role: "user",
-    content: "Hej Aice, giv mig idéer til rytme-aktiviteter i musikundervisning.",
+    content: "Teach me the basics of English."
   },
   {
     role: "assistant",
     content:
-      `Lad os vælge mellem tre hurtige rytme-aktiviteter (4.–6. kl.):
+"Let's start with greetings 👋 and simple words.\n- Hello! / Goodbye!\n- My name is ____.\n- I like ____.\nWhich one do you want to practice first?"
+  },
+
+  // Music example
+  {
+    role: "user",
+    content: "Hej Aice, giv mig idéer til rytme-aktiviteter i musikundervisning."
+  },
+  {
+    role: "assistant",
+    content:
+`Lad os vælge mellem tre hurtige rytme-aktiviteter (4.–6. kl.):
 1) 👐 Body percussion call-and-response.
 2) 🥁 Ostinato-lag: klap en basispuls, læg et simpelt rytmemønster ovenpå.
 3) 🎵 Rytmekort: træk 2–3 kort og klap/syng dem i kanon.
-Hvilken vil du prøve først? (Fælles Mål – Musik: musikudøvelse, musikalsk skaben).`,
+Hvilken vil du prøve først? (Fælles Mål – Musik: musikudøvelse, musikalsk skaben).`
   },
+
+  // Guardrail refusal example
   {
     role: "user",
-    content: "Skriv en færdig opgave for mig.",
+    content: "Skriv en færdig opgave for mig."
   },
   {
     role: "assistant",
     content:
-      `Jeg kan ikke skrive hele opgaven 🚫, men jeg kan lave en skitse:
+`Jeg kan ikke skrive hele opgaven 🚫, men jeg kan lave en skitse:
 • Emneidéer (3 valg)
 • Disposition i 5 trin
 • Sætningstartere
 • Tjekliste ✅
-Vil du starte med skitse eller tjekliste?`,
+Vil du starte med skitse eller tjekliste?`
   },
+
+  // Math example (kept, but after English)
   {
     role: "user",
-    content: "Can you solve 12 ÷ 3?",
+    content: "Can you solve 12 ÷ 3?"
   },
   {
     role: "assistant",
     content:
-      `Imagine 12 apples 🍎 and 3 friends 🤝. Share equally.
+`Imagine 12 apples 🍎 and 3 friends 🤝. Share equally.
 Give one apple to each friend, then another, until none are left.
-👉 How many apples does each friend get? Tell me. 😊`,
-  },
+👉 How many apples does each friend get? Tell me. 😊`
+  }
 ];
 
 // ---------- HANDLER ----------
@@ -121,6 +181,7 @@ export default async function handler(req, res) {
       role = "student",
       language,
       history = [], // optional: [{role:'user'|'assistant', content:'...'}, ...]
+      subject,      // NEW: explicit subject from UI
     } = req.body || {};
 
     if (!message.trim()) {
@@ -147,11 +208,13 @@ export default async function handler(req, res) {
         ? "Reply in Danish."
         : "Reply in English unless the user clearly writes Danish.";
 
-    // Context Persistence (subject lane)
-    const activeSubject = inferSubject({ message, history }); // 'english'|'math'|'music'|'history'|null
-    const subjectLine =
-      "Active Subject (Context Persistence): " +
-      (activeSubject ? activeSubject : "unknown (infer from conversation; do not switch unless user asks).");
+    // ---------- Subject locking ----------
+    const chosen = canonicalSubject(subject);
+    const inferred = inferSubject({ message, history });
+    // If nothing is chosen or inferred, DEFAULT TO ENGLISH
+    const activeSubject = chosen || inferred || "english";
+
+    const subjectLine = "Active Subject (Context Persistence): " + activeSubject;
 
     // System prompt
     const SYSTEM = `

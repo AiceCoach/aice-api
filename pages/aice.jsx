@@ -1,9 +1,9 @@
-// pages/aice.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
-
 // Images (HTTPS so they load on an HTTPS page)
-const AICE_AVATAR = "https://positivesoul.ai/wp-content/uploads/2025/08/aice_contact.jpg";
-const AICE_HERO   = "https://positivesoul.ai/wp-content/uploads/2025/09/aice-standing.png";
+const VER = "20250915"; // cache-busting
+
+const AICE_AVATAR = `https://positivesoul.ai/wp-content/uploads/2025/09/aice-svar.png?v=${VER}`;
+const AICE_HERO   = `https://positivesoul.ai/wp-content/uploads/2025/09/aice-letter.png?v=${VER}`;
+
 
 // Brand-safe text colors (no #666)
 const TEXT_DIM  = "#475569"; // labels, small text
@@ -58,14 +58,18 @@ export default function AicePage() {
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  // --- NEW: remember last chosen subject; default to English to avoid math drift
+  // Remember last chosen subject; default to English
   useEffect(() => {
-    const saved = typeof window !== "undefined" && localStorage.getItem("aice_subject");
-    if (saved) setSubject(saved);
-    else setSubject("engelsk"); // default lane (API will canonicalize)
+    try {
+      const saved = typeof window !== "undefined" && localStorage.getItem("aice_subject");
+      if (saved) setSubject(saved);
+      else setSubject("engelsk");
+    } catch {}
   }, []);
 
   const subjectOptions = useMemo(() => subjectsForGrade(grade), [grade]);
+
+  // If grade change invalidates current subject, clear it
   useEffect(() => {
     if (subject && !subjectOptions.some(s => s.key === subject)) setSubject("");
   }, [subjectOptions, subject]);
@@ -75,32 +79,30 @@ export default function AicePage() {
     const text = val.trim();
     if (!text) return;
 
+    // Build short chronological history (oldest -> newest) BEFORE we change state
+    const history = [...msgs]
+      .slice(0, 8)
+      .reverse()
+      .map(m => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: m.text
+      }));
+
     const id = Math.random().toString(36).slice(2);
     const pendingId = "p_" + id;
 
-    // NEWEST ON TOP: assistant placeholder + user
+    // Add placeholder + user (newest on top)
     setMsgs(prev => [
       { id: pendingId, role: "assistant", text: "Thinking…" },
       { id, role: "user", text },
       ...prev
     ]);
 
-    // “New empty chat window”
     setVal("");
     inputRef.current?.focus();
 
     try {
-      // Enforce Danish from client when checkbox is checked
       const messageForApi = replyInDanish ? `Svar på dansk.\n\n${text}` : text;
-
-      // --- NEW: build short chronological history (oldest -> newest)
-      const history = [...msgs]
-        .slice(0, 8)         // last 8 turns are enough
-        .reverse()           // now oldest first
-        .map(m => ({
-          role: m.role === "assistant" ? "assistant" : "user",
-          content: m.text
-        }));
 
       const res = await fetch("/api/aice", {
         method: "POST",
@@ -109,17 +111,17 @@ export default function AicePage() {
           message: messageForApi,
           role,
           grade,
-          subject: subject || "engelsk",            // --- NEW: always send subject
-          language: replyInDanish ? "da" : "en",    // --- NEW: API expects "language"
+          subject: subject || "engelsk",
+          language: replyInDanish ? "da" : "en",
           history
         })
       });
 
       const data = await res.json().catch(() => ({}));
       const reply = data.reply || data.message || data.output || "OK, but no reply field found.";
-      setMsgs(prev => prev.map(m => m.id === pendingId ? { ...m, text: reply } : m));
+      setMsgs(prev => prev.map(m => (m.id === pendingId ? { ...m, text: reply } : m)));
     } catch {
-      setMsgs(prev => prev.map(m => m.id === pendingId ? { ...m, text: "Network error. Try again." } : m));
+      setMsgs(prev => prev.map(m => (m.id === pendingId ? { ...m, text: "Network error. Try again." } : m)));
     }
   }
 
@@ -131,25 +133,25 @@ export default function AicePage() {
     <div style={{maxWidth:860,margin:"0 auto",font:"16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial"}}>
       {/* Hero: standing Aice presenting the chat */}
       <div style={{
-        display: "grid",
-        gridTemplateColumns: "auto 1fr",
-        gap: 16,
-        alignItems: "center",
-        margin: "8px 0 12px"
+        display:"grid",
+        gridTemplateColumns:"auto 1fr",
+        gap:16,
+        alignItems:"center",
+        margin:"8px 0 12px"
       }}>
         <img
           src={AICE_HERO}
           alt="Aice standing"
           style={{
-            width: "min(180px, 28vw)",
-            height: "auto",
-            objectFit: "contain",
-            filter: "drop-shadow(0 8px 20px rgba(0,0,0,0.18))"
+            width:"min(180px, 28vw)",
+            height:"auto",
+            objectFit:"contain",
+            filter:"drop-shadow(0 8px 20px rgba(0,0,0,0.18))"
           }}
         />
         <div>
-          <h1 style={{ margin: "8px 0" }}>Aice AI Coach</h1>
-          <p style={{ margin: 0, color: TEXT_DIM }}>
+          <h1 style={{ margin:"8px 0" }}>Aice AI Coach</h1>
+          <p style={{ margin:0, color:TEXT_DIM }}>
             {replyInDanish ? TAGLINE_DA : TAGLINE_EN}
           </p>
         </div>
@@ -159,7 +161,7 @@ export default function AicePage() {
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,alignItems:"center",margin:"12px 0"}}>
         <label style={{display:"grid",gap:6}}>
           <span style={{fontSize:12,color:TEXT_DIM}}>Role</span>
-          <select value={role} onChange={e=>setRole(e.target.value)}>
+          <select value={role} onChange={e=>setRole(e.target.value)} aria-label="Role">
             <option value="student">student</option>
             <option value="teacher">teacher</option>
             <option value="leadership">leadership</option>
@@ -169,7 +171,11 @@ export default function AicePage() {
 
         <label style={{display:"grid",gap:6}}>
           <span style={{fontSize:12,color:TEXT_DIM}}>Grade (0–10)</span>
-          <select value={grade} onChange={e=>setGrade(e.target.value === "auto" ? "auto" : Number(e.target.value))}>
+          <select
+            value={grade}
+            onChange={e=>setGrade(e.target.value === "auto" ? "auto" : Number(e.target.value))}
+            aria-label="Grade"
+          >
             <option value="auto">(auto)</option>
             {Array.from({length:11}).map((_,i)=><option key={i} value={i}>{i}</option>)}
           </select>
@@ -184,14 +190,22 @@ export default function AicePage() {
               setSubject(s);
               try { localStorage.setItem("aice_subject", s); } catch {}
             }}
+            aria-label="Subject"
           >
             <option value="">(choose)</option>
-            {subjectOptions.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+            {subjectOptions.map(s => (
+              <option key={s.key} value={s.key}>{s.label}</option>
+            ))}
           </select>
         </label>
 
         <label style={{display:"flex",gap:8,alignItems:"center",marginTop:20,color:TEXT_DIM}}>
-          <input type="checkbox" checked={replyInDanish} onChange={e=>setReplyInDanish(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={replyInDanish}
+            onChange={e=>setReplyInDanish(e.target.checked)}
+            aria-label="Reply in Danish"
+          />
           <span>Reply in Danish</span>
         </label>
       </div>
@@ -206,8 +220,13 @@ export default function AicePage() {
           placeholder="Type your question…"
           rows={4}
           style={{flex:1,padding:"12px",border:"1px solid #e5e7eb",borderRadius:12}}
+          aria-label="Message"
         />
-        <button type="submit" style={{padding:"12px 16px",border:"1px solid #5b6cff",background:"#5b6cff",color:"#fff",borderRadius:12,cursor:"pointer"}}>
+        <button
+          type="submit"
+          style={{padding:"12px 16px",border:"1px solid #5b6cff",background:"#5b6cff",color:"#fff",borderRadius:12,cursor:"pointer"}}
+          aria-label="Send"
+        >
           ➤
         </button>
       </form>
@@ -217,11 +236,7 @@ export default function AicePage() {
         {msgs.map(m => (
           <div key={m.id} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
             {/* Name/Avatar column */}
-            <div style={{
-              width:120, flex:"0 0 120px",
-              display:"flex", alignItems:"center", gap:8,
-              fontSize:12, color:TEXT_DIM
-            }}>
+            <div style={{ width:120, flex:"0 0 120px", display:"flex", alignItems:"center", gap:8, fontSize:12, color:TEXT_DIM }}>
               {m.role === "assistant" ? (
                 <>
                   <img
