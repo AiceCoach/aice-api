@@ -54,9 +54,16 @@ export default function AicePage() {
   const [replyInDanish, setReplyInDanish] = useState(false);
 
   // Chat state
-  const [msgs, setMsgs] = useState([]);
+  const [msgs, setMsgs] = useState([]);              // oldest → newest
   const [val, setVal] = useState("");
+
+  // Refs
+  const viewportRef = useRef(null);
   const inputRef = useRef(null);
+  const footerRef = useRef(null);
+
+  // Measured composer height (so we can pad the scroller correctly)
+  const [composerH, setComposerH] = useState(132);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -76,32 +83,48 @@ export default function AicePage() {
     if (subject && !subjectOptions.some(s => s.key === subject)) setSubject("");
   }, [subjectOptions, subject]);
 
+  // Auto-scroll to bottom whenever messages change
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [msgs.length, composerH]);
+
+  // Watch composer size (handles different keyboards / lines / translations)
+  useEffect(() => {
+    const el = footerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(entries => {
+      const box = entries[0]?.contentRect;
+      if (box?.height) setComposerH(Math.ceil(box.height));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   async function onSend(e) {
     e?.preventDefault();
     const text = val.trim();
     if (!text) return;
 
-    // Build short chronological history (oldest -> newest) BEFORE we change state
-    const history = [...msgs]
-      .slice(0, 8)
-      .reverse()
+    const id = Math.random().toString(36).slice(2);
+    const pendingId = "p_" + id;
+
+    // User message (append)
+    setMsgs(prev => [...prev, { id, role: "user", text }]);
+    setVal("");
+    inputRef.current?.focus();
+
+    // Build short chronological history (oldest → newest), including the just-sent user message
+    const history = [...msgs, { id, role: "user", text }]
+      .slice(-8)
       .map(m => ({
         role: m.role === "assistant" ? "assistant" : "user",
         content: m.text
       }));
 
-    const id = Math.random().toString(36).slice(2);
-    const pendingId = "p_" + id;
-
-    // Add placeholder + user (newest on top)
-    setMsgs(prev => [
-      { id: pendingId, role: "assistant", text: "Thinking…" },
-      { id, role: "user", text },
-      ...prev
-    ]);
-
-    setVal("");
-    inputRef.current?.focus();
+    // Assistant placeholder (append)
+    setMsgs(prev => [...prev, { id: pendingId, role: "assistant", text: "Thinking…" }]);
 
     try {
       const messageForApi = replyInDanish ? `Svar på dansk.\n\n${text}` : text;
@@ -132,151 +155,202 @@ export default function AicePage() {
   }
 
   return (
-    <div style={{maxWidth:860,margin:"0 auto",font:"16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial"}}>
-      {/* Hero: standing Aice presenting the chat */}
-      <div style={{
-        display:"grid",
-        gridTemplateColumns:"auto 1fr",
-        gap:16,
-        alignItems:"center",
-        margin:"8px 0 12px"
-      }}>
-        <img
-          src={AICE_HERO}
-          alt="Aice standing"
+    // ===== PAGE LAYOUT: full-height flex column =====
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        background: "#fff",
+        font: "16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial",
+      }}
+    >
+      {/* Centered content width wrapper */}
+      <div style={{ width: "100%", maxWidth: 860, margin: "0 auto", padding: "0 0 12px" }}>
+        {/* Hero: standing Aice presenting the chat */}
+        <div
           style={{
-            width:"min(180px, 28vw)",
-            height:"auto",
-            objectFit:"contain",
-            filter:"drop-shadow(0 8px 20px rgba(0,0,0,0.18))"
+            display:"grid",
+            gridTemplateColumns:"auto 1fr",
+            gap:16,
+            alignItems:"center",
+            margin:"8px 0 12px"
           }}
-        />
-        <div>
-          <h1 style={{ margin:"8px 0" }}>Aice AI Coach</h1>
-          <p style={{ margin:0, color:TEXT_DIM }}>
-            {replyInDanish ? TAGLINE_DA : TAGLINE_EN}
-          </p>
+        >
+          <img
+            src={AICE_HERO}
+            alt="Aice standing"
+            style={{
+              width:"min(180px, 28vw)",
+              height:"auto",
+              objectFit:"contain",
+              filter:"drop-shadow(0 8px 20px rgba(0,0,0,0.18))"
+            }}
+          />
+          <div>
+            <h1 style={{ margin:"8px 0" }}>Aice AI Coach</h1>
+            <p style={{ margin:0, color:TEXT_DIM }}>
+              {replyInDanish ? TAGLINE_DA : TAGLINE_EN}
+            </p>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,alignItems:"center",margin:"12px 0"}}>
+          <label style={{display:"grid",gap:6}}>
+            <span style={{fontSize:12,color:TEXT_DIM}}>Role</span>
+            <select value={role} onChange={e=>setRole(e.target.value)} aria-label="Role">
+              <option value="student">student</option>
+              <option value="teacher">teacher</option>
+              <option value="leadership">leadership</option>
+              <option value="parent">parent</option>
+            </select>
+          </label>
+
+          <label style={{display:"grid",gap:6}}>
+            <span style={{fontSize:12,color:TEXT_DIM}}>Grade (0–10)</span>
+            <select
+              value={grade}
+              onChange={e=>setGrade(e.target.value === "auto" ? "auto" : Number(e.target.value))}
+              aria-label="Grade"
+            >
+              <option value="auto">(auto)</option>
+              {Array.from({length:11}).map((_,i)=><option key={i} value={i}>{i}</option>)}
+            </select>
+          </label>
+
+          <label style={{display:"grid",gap:6}}>
+            <span style={{fontSize:12,color:TEXT_DIM}}>Subject</span>
+            <select
+              value={subject}
+              onChange={e=>{
+                const s = e.target.value;
+                setSubject(s);
+                try { localStorage.setItem("aice_subject", s); } catch {}
+              }}
+              aria-label="Subject"
+            >
+              <option value="">(choose)</option>
+              {subjectOptions.map(s => (
+                <option key={s.key} value={s.key}>{s.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <label style={{display:"flex",gap:8,alignItems:"center",marginTop:20,color:TEXT_DIM}}>
+            <input
+              type="checkbox"
+              checked={replyInDanish}
+              onChange={e=>setReplyInDanish(e.target.checked)}
+              aria-label="Reply in Danish"
+            />
+            <span>Reply in Danish</span>
+          </label>
         </div>
       </div>
 
-      {/* Controls */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,alignItems:"center",margin:"12px 0"}}>
-        <label style={{display:"grid",gap:6}}>
-          <span style={{fontSize:12,color:TEXT_DIM}}>Role</span>
-          <select value={role} onChange={e=>setRole(e.target.value)} aria-label="Role">
-            <option value="student">student</option>
-            <option value="teacher">teacher</option>
-            <option value="leadership">leadership</option>
-            <option value="parent">parent</option>
-          </select>
-        </label>
+      {/* ===== Messages viewport — the ONLY scroller ===== */}
+      <main
+        ref={viewportRef}
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          width: "100%",
+          // leave room for the fixed composer (measured live)
+          paddingBottom: `${composerH + 12}px`,
+        }}
+      >
+        <div style={{maxWidth:860, margin:"0 auto", padding:"0 0 12px"}}>
+          {/* Log (oldest → newest) with Aice avatar on assistant messages */}
+          <div role="log" aria-live="polite" style={{display:"flex",flexDirection:"column",gap:10}}>
+            {msgs.map(m => (
+              <div key={m.id} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                {/* Name/Avatar column */}
+                <div style={{ width:120, flex:"0 0 120px", display:"flex", alignItems:"center", gap:8, fontSize:12, color:TEXT_DIM }}>
+                  {m.role === "assistant" ? (
+                    <>
+                      <img
+                        src={AICE_AVATAR}
+                        alt="Aice"
+                        width={36}
+                        height={36}
+                        loading="lazy"
+                        decoding="async"
+                        style={{borderRadius:"50%", border:"1px solid #e5e7eb"}}
+                        onError={(e)=>{ e.currentTarget.style.display="none"; }}
+                      />
+                      <span>Aice</span>
+                    </>
+                  ) : (
+                    <span>You</span>
+                  )}
+                </div>
 
-        <label style={{display:"grid",gap:6}}>
-          <span style={{fontSize:12,color:TEXT_DIM}}>Grade (0–10)</span>
-          <select
-            value={grade}
-            onChange={e=>setGrade(e.target.value === "auto" ? "auto" : Number(e.target.value))}
-            aria-label="Grade"
-          >
-            <option value="auto">(auto)</option>
-            {Array.from({length:11}).map((_,i)=><option key={i} value={i}>{i}</option>)}
-          </select>
-        </label>
-
-        <label style={{display:"grid",gap:6}}>
-          <span style={{fontSize:12,color:TEXT_DIM}}>Subject</span>
-          <select
-            value={subject}
-            onChange={e=>{
-              const s = e.target.value;
-              setSubject(s);
-              try { localStorage.setItem("aice_subject", s); } catch {}
-            }}
-            aria-label="Subject"
-          >
-            <option value="">(choose)</option>
-            {subjectOptions.map(s => (
-              <option key={s.key} value={s.key}>{s.label}</option>
+                {/* Message bubble */}
+                <div style={{
+                  border:"1px solid #e5e7eb",
+                  borderRadius:12,
+                  padding:"10px 12px",
+                  background: m.role==="user" ? "#f8fafc" : "#f1f5ff",
+                  whiteSpace:"pre-wrap",
+                  flex:"1 1 auto"
+                }}>
+                  {m.text}
+                </div>
+              </div>
             ))}
-          </select>
-        </label>
-
-        <label style={{display:"flex",gap:8,alignItems:"center",marginTop:20,color:TEXT_DIM}}>
-          <input
-            type="checkbox"
-            checked={replyInDanish}
-            onChange={e=>setReplyInDanish(e.target.checked)}
-            aria-label="Reply in Danish"
-          />
-          <span>Reply in Danish</span>
-        </label>
-      </div>
-
-      {/* Composer */}
-      <form onSubmit={onSend} style={{display:"flex",gap:10,alignItems:"flex-start",margin:"8px 0 12px"}}>
-        <textarea
-          ref={inputRef}
-          value={val}
-          onChange={e=>setVal(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder="Type your question…"
-          rows={4}
-          style={{flex:1,padding:"12px",border:"1px solid #e5e7eb",borderRadius:12}}
-          aria-label="Message"
-        />
-        <button
-          type="submit"
-          style={{padding:"12px 16px",border:"1px solid #5b6cff",background:"#5b6cff",color:"#fff",borderRadius:12,cursor:"pointer"}}
-          aria-label="Send"
-        >
-          ➤
-        </button>
-      </form>
-
-      {/* Log (NEWEST ON TOP) with Aice avatar on assistant messages */}
-      <div role="log" aria-live="polite" style={{display:"flex",flexDirection:"column",gap:10}}>
-        {msgs.map(m => (
-          <div key={m.id} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
-            {/* Name/Avatar column */}
-            <div style={{ width:120, flex:"0 0 120px", display:"flex", alignItems:"center", gap:8, fontSize:12, color:TEXT_DIM }}>
-              {m.role === "assistant" ? (
-                <>
-                  <img
-                    src={AICE_AVATAR}
-                    alt="Aice"
-                    width={36}
-                    height={36}
-                    loading="lazy"
-                    decoding="async"
-                    style={{borderRadius:"50%", border:"1px solid #e5e7eb"}}
-                    onError={(e)=>{ e.currentTarget.style.display="none"; }}
-                  />
-                  <span>Aice</span>
-                </>
-              ) : (
-                <span>You</span>
-              )}
-            </div>
-
-            {/* Message bubble */}
-            <div style={{
-              border:"1px solid #e5e7eb",
-              borderRadius:12,
-              padding:"10px 12px",
-              background: m.role==="user" ? "#f8fafc" : "#f1f5ff",
-              whiteSpace:"pre-wrap",
-              flex:"1 1 auto"
-            }}>
-              {m.text}
-            </div>
           </div>
-        ))}
-      </div>
+        </div>
+      </main>
 
-      <p style={{fontSize:12,color:TEXT_NOTE,marginTop:16}}>
-        Note: Ranges reflect typical Danish Fælles Mål patterns (e.g., Musik 1–6; valgfag 7–9; Natur/teknologi 1–6;
-        Biologi/Geografi/Fysik-kemi 7–9). Local schedules can vary.
-      </p>
+      {/* ===== Composer — FIXED to viewport bottom ===== */}
+      <footer
+        ref={footerRef}
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 40,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(6px)",
+          borderTop: "1px solid #e5e7eb",
+          width: "100%",
+        }}
+      >
+        <form onSubmit={onSend} style={{maxWidth:860, margin:"10px auto 6px", display:"flex", gap:10, alignItems:"flex-start", padding:"0 0 0"}}>
+          <textarea
+            ref={inputRef}
+            value={val}
+            onChange={e=>setVal(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder="Type your question…"
+            rows={3}
+            style={{flex:1,padding:"12px",border:"1px solid #e5e7eb",borderRadius:12}}
+            aria-label="Message"
+          />
+          <button
+            type="submit"
+            style={{padding:"12px 16px",border:"1px solid #5b6cff",background:"#5b6cff",color:"#fff",borderRadius:12,cursor:"pointer"}}
+            aria-label="Send"
+          >
+            ➤
+          </button>
+        </form>
+        <div style={{maxWidth:860, margin:"0 auto", padding:"0 0 10px"}}>
+          <div style={{fontSize:12,color:TEXT_NOTE}}>
+            Aice will guide — not give.
+          </div>
+        </div>
+      </footer>
+
+      {/* Footnote */}
+      <div style={{maxWidth:860, margin:"8px auto 16px", padding:"0 0 0"}}>
+        <p style={{fontSize:12,color:TEXT_NOTE,margin:0}}>
+          Note: Ranges reflect typical Danish Fælles Mål patterns (e.g., Musik 1–6; valgfag 7–9; Natur/teknologi 1–6;
+          Biologi/Geografi/Fysik-kemi 7–9). Local schedules can vary.
+        </p>
+      </div>
     </div>
   );
 }
