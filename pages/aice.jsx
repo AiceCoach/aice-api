@@ -1,9 +1,11 @@
+// pages/aice.jsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
+
 // Images (HTTPS so they load on an HTTPS page)
 const VER = "20250915"; // cache-busting
 
 const AICE_AVATAR = `https://positivesoul.ai/wp-content/uploads/2025/09/aice-svar.png?v=${VER}`;
 const AICE_HERO   = `https://positivesoul.ai/wp-content/uploads/2025/09/aice-letter.png?v=${VER}`;
-
 
 // Brand-safe text colors (no #666)
 const TEXT_DIM  = "#475569"; // labels, small text
