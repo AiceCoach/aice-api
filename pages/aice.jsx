@@ -3,11 +3,10 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 
 // Images (HTTPS so they load on an HTTPS page)
 const VER = "20250915"; // cache-busting
-
 const AICE_AVATAR = `https://positivesoul.ai/wp-content/uploads/2025/09/aice-svar.png?v=${VER}`;
 const AICE_HERO   = `https://positivesoul.ai/wp-content/uploads/2025/09/aice-letter.png?v=${VER}`;
 
-// Brand-safe text colors (no #666)
+// Brand-safe text colors
 const TEXT_DIM  = "#475569"; // labels, small text
 const TEXT_NOTE = "#64748b"; // footnotes / helper text
 
@@ -48,22 +47,25 @@ function subjectsForGrade(grade) {
 
 export default function AicePage() {
   // Top controls
-  const [role, setRole] = useState("student");       // student | teacher | leadership | parent
-  const [grade, setGrade] = useState("auto");        // "auto" or 0..10
+  const [role, setRole] = useState("student");
+  const [grade, setGrade] = useState("auto");
   const [subject, setSubject] = useState("");
   const [replyInDanish, setReplyInDanish] = useState(false);
 
-  // Chat state
-  const [msgs, setMsgs] = useState([]);              // oldest → newest
+  // Chat state (oldest → newest)
+  const [msgs, setMsgs] = useState([]);
   const [val, setVal] = useState("");
 
   // Refs
-  const viewportRef = useRef(null);
+  const viewportRef = useRef(null);  // scroller
   const inputRef = useRef(null);
   const footerRef = useRef(null);
 
-  // Measured composer height (so we can pad the scroller correctly)
+  // Measured composer height (for padding bottom of the scroller)
   const [composerH, setComposerH] = useState(132);
+
+  // Is conversation empty?
+  const isEmpty = msgs.length === 0;
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -71,8 +73,7 @@ export default function AicePage() {
   useEffect(() => {
     try {
       const saved = typeof window !== "undefined" && localStorage.getItem("aice_subject");
-      if (saved) setSubject(saved);
-      else setSubject("engelsk");
+      setSubject(saved || "engelsk");
     } catch {}
   }, []);
 
@@ -83,14 +84,21 @@ export default function AicePage() {
     if (subject && !subjectOptions.some(s => s.key === subject)) setSubject("");
   }, [subjectOptions, subject]);
 
-  // Auto-scroll to bottom whenever messages change
-  useEffect(() => {
+  // Smooth-scroll helper
+  function scrollBottom(behavior = "smooth") {
     const el = viewportRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [msgs.length, composerH]);
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior });
+    });
+  }
 
-  // Watch composer size (handles different keyboards / lines / translations)
+  // Auto-scroll on new messages / composer resize (only when in chat state)
+  useEffect(() => {
+    if (!isEmpty) scrollBottom("smooth");
+  }, [msgs.length, composerH, isEmpty]);
+
+  // Watch composer size so chat body reserves space underneath
   useEffect(() => {
     const el = footerRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -110,21 +118,20 @@ export default function AicePage() {
     const id = Math.random().toString(36).slice(2);
     const pendingId = "p_" + id;
 
-    // User message (append)
+    // Append user message
     setMsgs(prev => [...prev, { id, role: "user", text }]);
     setVal("");
     inputRef.current?.focus();
+    scrollBottom("smooth");
 
-    // Build short chronological history (oldest → newest), including the just-sent user message
+    // Short chronological history
     const history = [...msgs, { id, role: "user", text }]
       .slice(-8)
-      .map(m => ({
-        role: m.role === "assistant" ? "assistant" : "user",
-        content: m.text
-      }));
+      .map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text }));
 
-    // Assistant placeholder (append)
+    // Assistant placeholder
     setMsgs(prev => [...prev, { id: pendingId, role: "assistant", text: "Thinking…" }]);
+    scrollBottom("smooth");
 
     try {
       const messageForApi = replyInDanish ? `Svar på dansk.\n\n${text}` : text;
@@ -145,8 +152,14 @@ export default function AicePage() {
       const data = await res.json().catch(() => ({}));
       const reply = data.reply || data.message || data.output || "OK, but no reply field found.";
       setMsgs(prev => prev.map(m => (m.id === pendingId ? { ...m, text: reply } : m)));
+
+      // ✅ Nudge the parent page to bring the iframe back into view (WordPress listener will catch this)
+      try { window.parent?.postMessage("aice-new-answer", "*"); } catch {}
+      scrollBottom("smooth");
     } catch {
       setMsgs(prev => prev.map(m => (m.id === pendingId ? { ...m, text: "Network error. Try again." } : m)));
+      try { window.parent?.postMessage("aice-new-answer", "*"); } catch {}
+      scrollBottom("smooth");
     }
   }
 
@@ -154,8 +167,8 @@ export default function AicePage() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
   }
 
+  // ---------- UI ----------
   return (
-    // ===== PAGE LAYOUT: full-height flex column =====
     <div
       style={{
         minHeight: "100vh",
@@ -165,30 +178,29 @@ export default function AicePage() {
         font: "16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial",
       }}
     >
-      {/* Centered content width wrapper */}
-      <div style={{ width: "100%", maxWidth: 860, margin: "0 auto", padding: "0 0 12px" }}>
-        {/* Hero: standing Aice presenting the chat */}
+      {/* Header / hero kept snug so it’s visible on arrival */}
+      <div style={{ width: "100%", maxWidth: 860, margin: "0 auto", padding: "0 0 8px" }}>
         <div
           style={{
             display:"grid",
             gridTemplateColumns:"auto 1fr",
             gap:16,
             alignItems:"center",
-            margin:"8px 0 12px"
+            margin:"12px 0 8px"
           }}
         >
           <img
             src={AICE_HERO}
             alt="Aice standing"
             style={{
-              width:"min(180px, 28vw)",
+              width:"min(160px, 22vw)",
               height:"auto",
               objectFit:"contain",
               filter:"drop-shadow(0 8px 20px rgba(0,0,0,0.18))"
             }}
           />
           <div>
-            <h1 style={{ margin:"8px 0" }}>Aice AI Coach</h1>
+            <h1 style={{ margin:"4px 0 6px" }}>Aice AI Coach</h1>
             <p style={{ margin:0, color:TEXT_DIM }}>
               {replyInDanish ? TAGLINE_DA : TAGLINE_EN}
             </p>
@@ -196,7 +208,7 @@ export default function AicePage() {
         </div>
 
         {/* Controls */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,alignItems:"center",margin:"12px 0"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,alignItems:"center",margin:"8px 0 0"}}>
           <label style={{display:"grid",gap:6}}>
             <span style={{fontSize:12,color:TEXT_DIM}}>Role</span>
             <select value={role} onChange={e=>setRole(e.target.value)} aria-label="Role">
@@ -249,103 +261,159 @@ export default function AicePage() {
         </div>
       </div>
 
-      {/* ===== Messages viewport — the ONLY scroller ===== */}
-      <main
-        ref={viewportRef}
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          width: "100%",
-          // leave room for the fixed composer (measured live)
-          paddingBottom: `${composerH + 12}px`,
-        }}
-      >
-        <div style={{maxWidth:860, margin:"0 auto", padding:"0 0 12px"}}>
-          {/* Log (oldest → newest) with Aice avatar on assistant messages */}
-          <div role="log" aria-live="polite" style={{display:"flex",flexDirection:"column",gap:10}}>
-            {msgs.map(m => (
-              <div key={m.id} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
-                {/* Name/Avatar column */}
-                <div style={{ width:120, flex:"0 0 120px", display:"flex", alignItems:"center", gap:8, fontSize:12, color:TEXT_DIM }}>
-                  {m.role === "assistant" ? (
-                    <>
-                      <img
-                        src={AICE_AVATAR}
-                        alt="Aice"
-                        width={36}
-                        height={36}
-                        loading="lazy"
-                        decoding="async"
-                        style={{borderRadius:"50%", border:"1px solid #e5e7eb"}}
-                        onError={(e)=>{ e.currentTarget.style.display="none"; }}
-                      />
-                      <span>Aice</span>
-                    </>
-                  ) : (
-                    <span>You</span>
-                  )}
-                </div>
+      {/* LANDING (no messages): center the first prompt like ChatGPT */}
+      {isEmpty && (
+        <section
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "12px 0",
+          }}
+        >
+          <form
+            onSubmit={onSend}
+            style={{width:"100%", maxWidth:860, display:"flex", gap:10, alignItems:"flex-start"}}
+          >
+            <textarea
+              ref={inputRef}
+              value={val}
+              onChange={e=>setVal(e.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder="Type your question…"
+              rows={3}
+              /* ✅ Bigger, readable font + visible focus ring */
+              style={{
+                flex:1,
+                padding:"12px",
+                border:"1px solid #e5e7eb",
+                borderRadius:12,
+                fontSize:"16px",
+                lineHeight:"1.4",
+                outlineOffset:"2px"
+              }}
+              aria-label="Message"
+            />
+            <button
+              type="submit"
+              style={{padding:"12px 16px",border:"1px solid #5b6cff",background:"#5b6cff",color:"#fff",borderRadius:12,cursor:"pointer"}}
+              aria-label="Send"
+            >
+              ➤
+            </button>
+          </form>
+        </section>
+      )}
 
-                {/* Message bubble */}
-                <div style={{
+      {/* CHAT (after first send): scrollable thread with composer docked to bottom */}
+      {!isEmpty && (
+        <>
+          <main
+            ref={viewportRef}
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflowY: "auto",
+              width: "100%",
+              scrollbarGutter: "stable both-edges",
+              paddingRight: 10,
+              paddingBottom: `${composerH + 12}px`,
+              overscrollBehavior: "contain",
+            }}
+          >
+            <div style={{maxWidth:860, margin:"0 auto", padding:"0 0 12px"}}>
+              <div role="log" aria-live="polite" style={{display:"flex",flexDirection:"column",gap:10}}>
+                {msgs.map(m => (
+                  <div key={m.id} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                    <div style={{ width:120, flex:"0 0 120px", display:"flex", alignItems:"center", gap:8, fontSize:12, color:TEXT_DIM }}>
+                      {m.role === "assistant" ? (
+                        <>
+                          <img
+                            src={AICE_AVATAR}
+                            alt="Aice"
+                            width={36}
+                            height={36}
+                            loading="lazy"
+                            decoding="async"
+                            style={{borderRadius:"50%", border:"1px solid #e5e7eb"}}
+                            onError={(e)=>{ e.currentTarget.style.display="none"; }}
+                          />
+                          <span>Aice</span>
+                        </>
+                      ) : (
+                        <span>You</span>
+                      )}
+                    </div>
+                    <div style={{
+                      border:"1px solid #e5e7eb",
+                      borderRadius:12,
+                      padding:"10px 12px",
+                      background: m.role==="user" ? "#f8fafc" : "#f1f5ff",
+                      whiteSpace:"pre-wrap",
+                      flex:"1 1 auto"
+                    }}>
+                      {m.text}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </main>
+
+          <footer
+            ref={footerRef}
+            style={{
+              position: "fixed",
+              left: 0, right: 0, bottom: 0,
+              zIndex: 40,
+              background: "rgba(255,255,255,0.98)",
+              backdropFilter: "blur(6px)",
+              borderTop: "1px solid #e5e7eb",
+              width: "100%",
+            }}
+          >
+            <form
+              onSubmit={onSend}
+              /* ✅ Ensure the focus outline isn’t clipped anywhere */
+              style={{maxWidth:860, margin:"10px auto 6px", display:"flex", gap:10, alignItems:"flex-start", overflow:"visible"}}
+            >
+              <textarea
+                ref={inputRef}
+                value={val}
+                onChange={e=>setVal(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder="Type your question…"
+                rows={3}
+                /* ✅ Bigger, readable font + visible focus ring */
+                style={{
+                  flex:1,
+                  padding:"12px",
                   border:"1px solid #e5e7eb",
                   borderRadius:12,
-                  padding:"10px 12px",
-                  background: m.role==="user" ? "#f8fafc" : "#f1f5ff",
-                  whiteSpace:"pre-wrap",
-                  flex:"1 1 auto"
-                }}>
-                  {m.text}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </main>
-
-      {/* ===== Composer — FIXED to viewport bottom ===== */}
-      <footer
-        ref={footerRef}
-        style={{
-          position: "fixed",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 40,
-          background: "rgba(255,255,255,0.98)",
-          backdropFilter: "blur(6px)",
-          borderTop: "1px solid #e5e7eb",
-          width: "100%",
-        }}
-      >
-        <form onSubmit={onSend} style={{maxWidth:860, margin:"10px auto 6px", display:"flex", gap:10, alignItems:"flex-start", padding:"0 0 0"}}>
-          <textarea
-            ref={inputRef}
-            value={val}
-            onChange={e=>setVal(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Type your question…"
-            rows={3}
-            style={{flex:1,padding:"12px",border:"1px solid #e5e7eb",borderRadius:12}}
-            aria-label="Message"
-          />
-          <button
-            type="submit"
-            style={{padding:"12px 16px",border:"1px solid #5b6cff",background:"#5b6cff",color:"#fff",borderRadius:12,cursor:"pointer"}}
-            aria-label="Send"
-          >
-            ➤
-          </button>
-        </form>
-        <div style={{maxWidth:860, margin:"0 auto", padding:"0 0 10px"}}>
-          <div style={{fontSize:12,color:TEXT_NOTE}}>
-            Aice will guide — not give.
-          </div>
-        </div>
-      </footer>
+                  fontSize:"16px",
+                  lineHeight:"1.4",
+                  outlineOffset:"2px"
+                }}
+                aria-label="Message"
+              />
+              <button
+                type="submit"
+                style={{padding:"12px 16px",border:"1px solid #5b6cff",background:"#5b6cff",color:"#fff",borderRadius:12,cursor:"pointer"}}
+                aria-label="Send"
+              >
+                ➤
+              </button>
+            </form>
+            <div style={{maxWidth:860, margin:"0 auto", padding:"0 0 10px"}}>
+              <div style={{fontSize:12,color:TEXT_NOTE}}>Aice will guide — not give.</div>
+            </div>
+          </footer>
+        </>
+      )}
 
       {/* Footnote */}
-      <div style={{maxWidth:860, margin:"8px auto 16px", padding:"0 0 0"}}>
+      <div style={{maxWidth:860, margin:"8px auto 16px"}}>
         <p style={{fontSize:12,color:TEXT_NOTE,margin:0}}>
           Note: Ranges reflect typical Danish Fælles Mål patterns (e.g., Musik 1–6; valgfag 7–9; Natur/teknologi 1–6;
           Biologi/Geografi/Fysik-kemi 7–9). Local schedules can vary.
