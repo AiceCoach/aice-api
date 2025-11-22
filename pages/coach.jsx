@@ -198,8 +198,73 @@ export default function PositiveSoulCoachPage() {
         </div>
       </div>
 
-      {/* Chat & composer code unchanged except label replacements */}
-      {/* ...same layout structure... */}
+      {/* ================== CHAT COMPOSER ================== */}
+      <div
+        ref={viewportRef}
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "16px 20px 120px",
+          boxSizing: "border-box",
+        }}
+      >
+        {msgs.map((m) => (
+          <div key={m.id} style={{ marginBottom: 12 }}>
+            <strong>{m.role === "assistant" ? "Coach:" : "You:"}</strong>{" "}
+            <span style={{ whiteSpace: "pre-wrap" }}>{m.text}</span>
+          </div>
+        ))}
+      </div>
+
+      <form
+        onSubmit={onSend}
+        ref={footerRef}
+        style={{
+          position: "sticky",
+          bottom: 0,
+          left: 0,
+          width: "100%",
+          background: "#f8fafc",
+          borderTop: "1px solid #e2e8f0",
+          padding: "12px 20px",
+        }}
+      >
+        <textarea
+          ref={inputRef}
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder="Ask your coach something..."
+          rows={2}
+          style={{
+            width: "100%",
+            resize: "none",
+            fontSize: 15,
+            lineHeight: "1.4",
+            borderRadius: 8,
+            padding: "8px 10px",
+            border: "1px solid #cbd5e1",
+            fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial",
+          }}
+        />
+        <div style={{ marginTop: 8, textAlign: "right" }}>
+          <button
+            type="submit"
+            style={{
+              background: "#2ea7ff",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              padding: "6px 14px",
+              cursor: "pointer",
+              fontSize: 14,
+            }}
+          >
+            Send
+          </button>
+        </div>
+      </form>
+      {/* ================== END CHAT COMPOSER ================== */}
 
       <div style={{maxWidth:860, margin:"0 auto", padding:"0 0 10px"}}>
         <div style={{fontSize:12,color:TEXT_NOTE}}>positiveSOUL AI Coach will guide — not give.</div>
